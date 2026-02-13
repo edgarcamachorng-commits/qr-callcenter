@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema QR con Supabase</title>
     <style>
-        /* Tus estilos - están bien, los dejo igual */
         :root {
             --mutua: #0066a1;
             --aurgi: #00a859;
@@ -109,7 +108,7 @@
             margin-top: 10px;
         }
         
-        .btn-generate:hover {
+        .btn-generate:hover:not(:disabled) {
             background: #005080;
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(0,102,161,0.2);
@@ -282,9 +281,14 @@
             <div class="form-group">
                 <label for="docType">📄 Tipo de Documento</label>
                 <select id="docType">
-                    <option value="Formación">Formación</option>
+                    <option value="Formación individual">Formación individual</option>
+                    <option value="Formación grupal">Formación grupal</option>
                     <option value="Acuerdo Confidencialidad">Acuerdo Confidencialidad</option>
                     <option value="Evaluación de Desempeño">Evaluación de Desempeño</option>
+                    <option value="Petición de formación">Petición de formación</option>
+                    <option value="Minuta">Minuta</option>
+                    <option value="Vacaciones">Vacaciones</option>
+                    <option value="Formador">Formador</option>
                     <option value="Reporte de Incidencia">Reporte de Incidencia</option>
                     <option value="Comunicación Interna">Comunicación Interna</option>
                     <option value="Otro Documento">Otro Documento</option>
@@ -380,16 +384,17 @@
     const SUPABASE_URL = 'https://eayibccyjvpmusarzlgf.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVheWliY2N5anZwbXVzYXJ6bGdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5ODA5OTEsImV4cCI6MjA4NjU1Njk5MX0.TPrFyv7QRJXprmPEK-kwyp0Tcht4S1nDRJr4hZo09Mo';
     
-    // Inicializar Supabase
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Inicializar Supabase CORRECTAMENTE
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     
     const DOMINIOS_PERMITIDOS = ['@mutua.es', '@aurgi.com', '@mutuamadmotor.com'];
 
     // ======================
-    // GENERAR CÓDIGO - VERSIÓN SIMPLIFICADA QUE FUNCIONA
+    // GENERAR CÓDIGO - VERSIÓN CORREGIDA
     // ======================
     async function generateCode() {
-        console.log('generateCode iniciado');
+        console.log('🔄 Iniciando generación de código...');
         
         const email = document.getElementById('agentEmail').value.trim();
         const nombre = document.getElementById('agentName').value.trim();
@@ -402,6 +407,15 @@
             return;
         }
         
+        // Validar dominio
+        const emailLower = email.toLowerCase();
+        const esValido = DOMINIOS_PERMITIDOS.some(dominio => emailLower.endsWith(dominio));
+        
+        if (!esValido) {
+            alert('❌ El correo debe ser de @mutua.es, @aurgi.com o @mutuamadmotor.com');
+            return;
+        }
+        
         // Mostrar loading
         const btn = document.getElementById('generateBtn');
         const originalText = btn.innerHTML;
@@ -411,39 +425,37 @@
         try {
             // Generar código único
             const codigoUnico = generateUniqueCode();
-            console.log('Código generado:', codigoUnico);
+            console.log('✅ Código generado:', codigoUnico);
             
-            // GUARDAR EN SUPABASE - Versión corregida
-            const { data, error } = await supabase
+            // GUARDAR EN SUPABASE - ESTRUCTURA CORRECTA
+            const { data, error } = await supabaseClient
                 .from('codigos_qr')
-                .insert([
-                    {
-                        codigo: codigoUnico,
-                        email: email,
-                        nombre_agente: nombre,
-                        tipo_documento: tipoDoc,
-                        hash_documento: hashDoc || null,
-                        fecha_creacion: new Date().toISOString(),
-                        verificado: false
-                    }
-                ]);
+                .insert({
+                    codigo: codigoUnico,
+                    email: email,
+                    nombre_agente: nombre,
+                    tipo_documento: tipoDoc,
+                    hash_documento: hashDoc || null,
+                    verificado: false
+                })
+                .select(); // Importante: select() para obtener el registro insertado
             
             if (error) {
-                console.error('Error de Supabase:', error);
-                throw error;
+                console.error('❌ Error de Supabase:', error);
+                throw new Error(error.message);
             }
             
-            console.log('✅ Guardado en Supabase');
+            console.log('✅ Guardado en Supabase:', data);
             
             // MOSTRAR RESULTADOS
             const urlVerificacion = `${window.location.origin}${window.location.pathname}?verify=${codigoUnico}`;
             mostrarResultado(codigoUnico, urlVerificacion, email, nombre, tipoDoc, hashDoc);
             
-            alert('✅ Código guardado en base de datos');
+            alert('✅ Código guardado exitosamente en la base de datos');
             
         } catch (error) {
-            console.error('Error:', error);
-            alert('❌ Error: ' + (error.message || 'Error al guardar'));
+            console.error('❌ Error completo:', error);
+            alert('❌ Error al guardar: ' + error.message);
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -465,18 +477,23 @@
         
         resultDiv.innerHTML = '<p>🔍 Verificando...</p>';
         resultDiv.className = 'verification-result';
+        resultDiv.style.display = 'block';
         
         try {
-            const { data, error } = await supabase
+            console.log('🔍 Buscando código:', codigo);
+            
+            const { data, error } = await supabaseClient
                 .from('codigos_qr')
                 .select('*')
                 .eq('codigo', codigo)
                 .single();
             
             if (error) {
+                console.error('Error en consulta:', error);
+                
                 if (error.code === 'PGRST116') {
                     resultDiv.className = 'verification-result error';
-                    resultDiv.innerHTML = '❌ Código no encontrado';
+                    resultDiv.innerHTML = '❌ Código no encontrado en la base de datos';
                 } else {
                     throw error;
                 }
@@ -484,8 +501,10 @@
             }
             
             if (data) {
+                console.log('✅ Código encontrado:', data);
+                
                 // Actualizar como verificado
-                await supabase
+                const { error: updateError } = await supabaseClient
                     .from('codigos_qr')
                     .update({ 
                         verificado: true,
@@ -493,18 +512,24 @@
                     })
                     .eq('id', data.id);
                 
+                if (updateError) {
+                    console.error('Error al actualizar:', updateError);
+                }
+                
                 resultDiv.className = 'verification-result success';
                 resultDiv.innerHTML = `
-                    <h3>✅ Código Válido</h3>
-                    <p><strong>Agente:</strong> ${data.nombre_agente} (${data.email})</p>
+                    <h3>✅ Código Válido y Verificado</h3>
+                    <p><strong>Agente:</strong> ${data.nombre_agente}</p>
+                    <p><strong>Email:</strong> ${data.email}</p>
                     <p><strong>Tipo documento:</strong> ${data.tipo_documento}</p>
-                    <p><strong>Fecha creación:</strong> ${new Date(data.fecha_creacion).toLocaleString()}</p>
-                    <p><strong>Hash documento:</strong> ${data.hash_documento || 'No proporcionado'}</p>
+                    <p><strong>Fecha creación:</strong> ${new Date(data.fecha_creacion).toLocaleString('es-ES')}</p>
+                    ${data.hash_documento ? `<p><strong>Hash documento:</strong> ${data.hash_documento}</p>` : ''}
+                    <p><strong>Verificado:</strong> ${new Date().toLocaleString('es-ES')}</p>
                 `;
             }
             
         } catch (error) {
-            console.error('Error:', error);
+            console.error('❌ Error:', error);
             resultDiv.className = 'verification-result error';
             resultDiv.innerHTML = '❌ Error de conexión: ' + error.message;
         }
@@ -523,7 +548,9 @@
         new QRCode(qrContainer, {
             text: url,
             width: 200,
-            height: 200
+            height: 200,
+            colorDark: "#000000",
+            colorLight: "#ffffff"
         });
         
         // Guardar en localStorage
@@ -533,13 +560,18 @@
             nombre: nombre,
             tipo: tipo,
             hash: hash,
-            fecha: new Date().toLocaleString(),
+            fecha: new Date().toLocaleString('es-ES'),
             url: url,
             verificado: false
         });
         
         document.getElementById('results').classList.add('show');
         updateLocalHistory();
+        
+        // Scroll suave a resultados
+        setTimeout(() => {
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }, 100);
     }
 
     function generateUniqueCode() {
@@ -552,7 +584,7 @@
     }
 
     // ======================
-    // VALIDACIÓN DE EMAIL (informativa)
+    // VALIDACIÓN DE EMAIL
     // ======================
     function validateEmail() {
         const emailInput = document.getElementById('agentEmail');
@@ -572,7 +604,7 @@
             messageDiv.style.color = '#28a745';
             return true;
         } else {
-            messageDiv.textContent = '⚠️ Dominio no autorizado (puede continuar)';
+            messageDiv.textContent = '⚠️ Dominio no autorizado';
             messageDiv.style.color = '#ff6600';
             return false;
         }
@@ -599,15 +631,20 @@
         
         let html = '';
         historial.slice(0, 10).forEach(item => {
+            const dominio = item.email.split('@')[1];
+            let color = '#0066a1';
+            if (dominio === 'aurgi.com') color = '#00a859';
+            if (dominio === 'mutuamadmotor.com') color = '#ff6600';
+            
             html += `
                 <div class="history-item">
                     <div>
-                        <strong>${item.codigo}</strong><br>
+                        <strong style="color: ${color}">${item.codigo}</strong><br>
                         <small>${item.email} • ${item.tipo}</small>
                     </div>
                     <div style="text-align: right;">
                         <small>${item.fecha}</small><br>
-                        <small>${item.verificado ? '✅' : '⏳'}</small>
+                        <small>${item.verificado ? '✅ Verificado' : '⏳ Pendiente'}</small>
                     </div>
                 </div>
             `;
@@ -621,7 +658,8 @@
     function copyToClipboard(elementId) {
         const text = document.getElementById(elementId).textContent;
         navigator.clipboard.writeText(text)
-            .then(() => alert('✅ Copiado al portapapeles'));
+            .then(() => alert('✅ Copiado al portapapeles'))
+            .catch(err => alert('❌ Error al copiar'));
     }
 
     function downloadQR() {
@@ -638,19 +676,23 @@
     // INICIALIZACIÓN
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Sistema inicializado');
+        console.log('📡 Supabase URL:', SUPABASE_URL);
+        
         // Configurar validación de email
         const emailInput = document.getElementById('agentEmail');
         emailInput.addEventListener('input', validateEmail);
-        
-        // Habilitar botón siempre
-        document.getElementById('generateBtn').disabled = false;
+        emailInput.addEventListener('blur', validateEmail);
         
         // Verificar código en URL
         const urlParams = new URLSearchParams(window.location.search);
-        const verifyCode = urlParams.get('verify');
-        if (verifyCode) {
-            document.getElementById('verifyCode').value = verifyCode;
-            setTimeout(verifyCode, 500);
+        const verifyCodeParam = urlParams.get('verify');
+        if (verifyCodeParam) {
+            document.getElementById('verifyCode').value = verifyCodeParam;
+            setTimeout(() => {
+                verifyCode();
+                document.querySelector('.verification-section').scrollIntoView({ behavior: 'smooth' });
+            }, 500);
         }
         
         // Cargar historial
