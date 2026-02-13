@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema QR con Supabase</title>
+    <!-- Mismos estilos que tu código original -->
+    <style>
+                :root {
+            --mutua: #0066a1;
+            --aurgi: #00a859;
+            --madmotor: #ff6600;
+        }
+  
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(to right, var(--mutua), var(--aurgi), var(--madmotor));
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .domains {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .domain-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 0.95rem;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--mutua);
+            box-shadow: 0 0 0 3px rgba(0,102,161,0.1);
+        }
+        
+        .btn {
+            padding: 16px 32px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+        }
+        
+        .btn-generate {
+            background: var(--mutua);
+            color: white;
+            margin-top: 10px;
+        }
+        
+        .btn-generate:hover {
+            background: #005080;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,102,161,0.2);
+        }
+        
+        .btn-generate:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .results {
+            margin-top: 40px;
+            padding: 30px;
+            background: #f8fafc;
+            border-radius: 15px;
+            border: 2px dashed #cbd5e1;
+            text-align: center;
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .code-display {
+            font-family: 'Courier New', monospace;
+            font-size: 1.8rem;
+            letter-spacing: 3px;
+            background: #1a202c;
+            color: #68d391;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        
+        .qr-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        
+        .copy-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-copy {
+            background: #4fd1c7;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-copy:hover {
+            background: #38b2ac;
+        }
+        
+        .verification-section {
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 2px solid #e2e8f0;
+        }
+        
+        .verification-result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .verification-result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        
+        .verification-result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        
+        .history {
+            margin-top: 40px;
+        }
+        
+        .history-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                padding: 20px;
+            }
+            
+            .code-display {
+                font-size: 1.4rem;
+                padding: 15px;
+            }
+            
+            .copy-buttons {
+                flex-direction: column;
+            }
+            
+            .btn-copy {
+                width: 100%;
+            }
+        }
+    </style>
+    <!-- Librerías -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Mismo HTML que tu código original -->
+    </div>
+
+    <script>
+        // ======================
+        // CONFIGURACIÓN SUPABASE
+        // ======================
+        const SUPABASE_URL = 'https://eayibccyjvpmusarzlgf.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVheWliY2N5anZwbXVzYXJ6bGdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5ODA5OTEsImV4cCI6MjA4NjU1Njk5MX0.TPrFyv7QRJXprmPEK-kwyp0Tcht4S1nDRJr4hZo09Mo
+';
+        
+        // Inicializar Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const DOMINIOS_PERMITIDOS = ['@mutua.es', '@aurgi.com', '@mutuamadmotor.com'];
+
+        // ======================
+        // FUNCIÓN PRINCIPAL: GENERAR CÓDIGO
+        // ======================
+        async function generateCode() {
+            const email = document.getElementById('agentEmail').value.trim();
+            const nombre = document.getElementById('agentName').value.trim();
+            const tipoDoc = document.getElementById('docType').value;
+            const hashDoc = document.getElementById('docHash').value.trim();
+            
+            // Validaciones
+            if (!validateEmail() || !nombre) {
+                alert('❌ Datos inválidos');
+                return;
+            }
+            
+            // Mostrar loading
+            const btn = document.getElementById('generateBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span>⏳ Generando...</span>';
+            btn.disabled = true;
+            
+            try {
+                // Generar código único
+                const codigoUnico = generateUniqueCode();
+                
+                // 1. GUARDAR EN SUPABASE
+                const { data, error } = await supabase
+                    .from('codigos_qr')
+                    .insert([
+                        {
+                            codigo: codigoUnico,
+                            email: email,
+                            nombre_agente: nombre,
+                            tipo_documento: tipoDoc,
+                            hash_documento: hashDoc || null,
+                            metadata: {
+                                user_agent: navigator.userAgent,
+                                timestamp: new Date().toISOString()
+                            }
+                        }
+                    ])
+                    .select();
+                
+                if (error) throw error;
+                
+                console.log('✅ Guardado en Supabase:', data);
+                
+                // 2. VERIFICAR QUE SE GUARDÓ
+                const { data: verifyData, error: verifyError } = await supabase
+                    .from('codigos_qr')
+                    .select('*')
+                    .eq('codigo', codigoUnico)
+                    .single();
+                
+                if (verifyData) {
+                    console.log('✅ Verificado en BD:', verifyData);
+                }
+                
+                // 3. MOSTRAR RESULTADOS
+                const urlVerificacion = `${window.location.origin}${window.location.pathname}?verify=${codigoUnico}`;
+                mostrarResultado(codigoUnico, urlVerificacion, {
+                    email, nombre, tipoDoc, hashDoc
+                });
+                
+                alert('✅ Código guardado en base de datos');
+                
+            } catch (error) {
+                console.error('Error:', error);
+                
+                // Fallback a localStorage si Supabase falla
+                const codigoUnico = generateUniqueCode();
+                const urlVerificacion = `${window.location.origin}${window.location.pathname}?verify=${codigoUnico}`;
+                
+                mostrarResultado(codigoUnico, urlVerificacion, {
+                    email, nombre, tipoDoc, hashDoc
+                });
+                
+                alert('⚠️ Modo offline - datos guardados localmente');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // ======================
+        // VERIFICAR CÓDIGO EN SUPABASE
+        // ======================
+        async function verifyCode() {
+            const codigo = document.getElementById('verifyCode').value.trim().toUpperCase();
+            const resultDiv = document.getElementById('verificationResult');
+            
+            if (!codigo || codigo.length !== 8) {
+                showResult('error', '❌ Código inválido');
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>🔍 Verificando...</p>';
+            
+            try {
+                // Buscar en Supabase
+                const { data, error } = await supabase
+                    .from('codigos_qr')
+                    .select('*')
+                    .eq('codigo', codigo)
+                    .single();
+                
+                if (error) throw error;
+                
+                if (data) {
+                    // Registrar esta verificación en la tabla de log
+                    await supabase
+                        .from('verificaciones_log')
+                        .insert([
+                            {
+                                codigo_id: data.id,
+                                ip_address: null, // Podrías obtener la IP
+                                user_agent: navigator.userAgent,
+                                resultado: true
+                            }
+                        ]);
+                    
+                    // Actualizar contador de verificaciones
+                    await supabase
+                        .from('codigos_qr')
+                        .update({ 
+                            verificado: true,
+                            fecha_verificacion: new Date().toISOString()
+                        })
+                        .eq('id', data.id);
+                    
+                    showResult('success', `
+                        <h3>✅ Código Válido</h3>
+                        <p><strong>Agente:</strong> ${data.nombre_agente} (${data.email})</p>
+                        <p><strong>Tipo documento:</strong> ${data.tipo_documento}</p>
+                        <p><strong>Fecha creación:</strong> ${new Date(data.fecha_creacion).toLocaleString()}</p>
+                        <p><strong>Hash documento:</strong> ${data.hash_documento || 'No proporcionado'}</p>
+                        <p><strong>Verificaciones:</strong> Primera vez</p>
+                    `);
+                    
+                    // Actualizar localStorage
+                    updateLocalVerification(codigo, true);
+                    
+                } else {
+                    // Buscar en localStorage como fallback
+                    const localResult = searchInLocalHistory(codigo);
+                    if (localResult) {
+                        showResult('success', `
+                            <h3>⚠️ Código Local</h3>
+                            <p>${localResult.email} - ${localResult.fecha}</p>
+                            <p><small>No encontrado en base de datos central</small></p>
+                        `);
+                    } else {
+                        showResult('error', '❌ Código no encontrado');
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error verificando:', error);
+                showResult('error', '❌ Error de conexión con la base de datos');
+            }
+        }
+
+        // ======================
+        // OBTENER HISTORIAL DESDE SUPABASE
+        // ======================
+        async function loadHistoryFromSupabase() {
+            try {
+                const { data, error } = await supabase
+                    .from('codigos_qr')
+                    .select('*')
+                    .order('fecha_creacion', { ascending: false })
+                    .limit(20);
+                
+                if (error) throw error;
+                
+                displayHistory(data);
+                
+            } catch (error) {
+                console.error('Error cargando historial:', error);
+                // Fallback a localStorage
+                displayHistoryFromLocal();
+            }
+        }
+
+        // ======================
+        // FUNCIONES AUXILIARES
+        // ======================
+        function mostrarResultado(codigo, url, datos) {
+            document.getElementById('uniqueCode').textContent = codigo;
+            document.getElementById('verificationUrl').textContent = url;
+            
+            // Generar QR
+            const qrContainer = document.getElementById('qrCode');
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, {
+                text: url,
+                width: 200,
+                height: 200
+            });
+            
+            // Guardar en localStorage como respaldo
+            saveToLocalHistory({
+                codigo: codigo,
+                email: datos.email,
+                nombre: datos.nombre,
+                tipo: datos.tipoDoc,
+                hash: datos.hashDoc,
+                fecha: new Date().toLocaleString(),
+                url: url,
+                verificado: false
+            });
+            
+            document.getElementById('results').classList.add('show');
+            updateLocalHistory();
+        }
+
+        function showResult(type, html) {
+            const resultDiv = document.getElementById('verificationResult');
+            resultDiv.className = `verification-result ${type}`;
+            resultDiv.innerHTML = html;
+        }
+
+        function generateUniqueCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let result = '';
+            for (let i = 0; i < 8; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // ======================
+        // VALIDACIÓN DE EMAIL (igual que antes)
+        // ======================
+        function validateEmail() {
+            // Tu código de validación original
+            const emailInput = document.getElementById('agentEmail');
+            const email = emailInput.value.trim();
+            const messageDiv = document.getElementById('emailMessage');
+            const btn = document.getElementById('generateBtn');
+            
+            if (!email) {
+                messageDiv.textContent = '⏳ Ingrese su correo';
+                btn.disabled = true;
+                return false;
+            }
+            
+            const emailLower = email.toLowerCase();
+            const esValido = DOMINIOS_PERMITIDOS.some(dominio => 
+                emailLower.endsWith(dominio)
+            );
+            
+            if (esValido) {
+                messageDiv.textContent = '✅ Correo válido';
+                messageDiv.style.color = '#28a745';
+                btn.disabled = false;
+                return true;
+            } else {
+                messageDiv.textContent = '❌ Dominio no autorizado';
+                messageDiv.style.color = '#dc3545';
+                btn.disabled = true;
+                return false;
+            }
+        }
+
+        // ======================
+        // FUNCIONES DE LOCALSTORAGE (backup)
+        // ======================
+        function saveToLocalHistory(data) {
+            let historial = JSON.parse(localStorage.getItem('codigosQR') || '[]');
+            historial.unshift(data);
+            if (historial.length > 100) historial = historial.slice(0, 100);
+            localStorage.setItem('codigosQR', JSON.stringify(historial));
+        }
+
+        function searchInLocalHistory(codigo) {
+            const historial = JSON.parse(localStorage.getItem('codigosQR') || '[]');
+            return historial.find(item => item.codigo === codigo);
+        }
+
+        function updateLocalVerification(codigo, verificado) {
+            const historial = JSON.parse(localStorage.getItem('codigosQR') || '[]');
+            const item = historial.find(item => item.codigo === codigo);
+            if (item) {
+                item.verificado = verificado;
+                localStorage.setItem('codigosQR', JSON.stringify(historial));
+                updateLocalHistory();
+            }
+        }
+
+        function updateLocalHistory() {
+            const historial = JSON.parse(localStorage.getItem('codigosQR') || '[]');
+            const container = document.getElementById('localHistory');
+            
+            if (historial.length === 0) {
+                container.innerHTML = '<p>No hay códigos locales</p>';
+                return;
+            }
+            
+            let html = '';
+            historial.slice(0, 10).forEach(item => {
+                html += `
+                    <div class="history-item">
+                        <div>
+                            <strong>${item.codigo}</strong><br>
+                            <small>${item.email}</small>
+                        </div>
+                        <div>
+                            <small>${item.fecha}</small><br>
+                            <small>${item.verificado ? '✅' : '⏳'}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function displayHistoryFromLocal() {
+            updateLocalHistory();
+        }
+
+        // ======================
+        // INICIALIZACIÓN
+        // ======================
+        document.addEventListener('DOMContentLoaded', function() {
+            // Configurar validación de email
+            document.getElementById('agentEmail').addEventListener('input', validateEmail);
+            
+            // Cargar historial desde Supabase (o localStorage como fallback)
+            loadHistoryFromSupabase();
+            
+            // Verificar código en URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const verifyCode = urlParams.get('verify');
+            if (verifyCode) {
+                document.getElementById('verifyCode').value = verifyCode;
+                setTimeout(verifyCode, 500);
+            }
+        });
+
+        // Funciones de utilidad (copy, download, etc.)
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => alert('✅ Copiado'));
+        }
+
+        function copyCode(codigo) {
+            navigator.clipboard.writeText(codigo).then(() => alert(`Código ${codigo} copiado`));
+        }
+
+        function downloadQR() {
+            const qrCanvas = document.querySelector('#qrCode canvas');
+            if (qrCanvas) {
+                const link = document.createElement('a');
+                link.download = `QR_${document.getElementById('uniqueCode').textContent}.png`;
+                link.href = qrCanvas.toDataURL();
+                link.click();
+            }
+        }
+    </script>
+</body>
+</html>
