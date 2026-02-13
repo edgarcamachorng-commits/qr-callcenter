@@ -375,17 +375,6 @@
 
 <script>
     // ======================
-// FORZAR HABILITACIÓN DEL BOTÓN (AGREGA ESTO)
-// ======================
-document.addEventListener('DOMContentLoaded', function() {
-    // Forzar que el botón se habilite después de 1 segundo
-    setTimeout(function() {
-        const btn = document.getElementById('generateBtn');
-        btn.disabled = false;
-        console.log('✅ Botón forzado a habilitado');
-    }, 1000);
-});
-    // ======================
     // CONFIGURACIÓN SUPABASE
     // ======================
     const SUPABASE_URL = 'https://eayibccyjvpmusarzlgf.supabase.co';
@@ -397,63 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const DOMINIOS_PERMITIDOS = ['@mutua.es', '@aurgi.com', '@mutuamadmotor.com'];
 
     // ======================
-    // VALIDACIÓN DE EMAIL - VERSIÓN CORREGIDA
-    // ======================
-    function validateEmail() {
-        const emailInput = document.getElementById('agentEmail');
-        const email = emailInput.value.trim();
-        const messageDiv = document.getElementById('emailMessage');
-        const btn = document.getElementById('generateBtn');
-        
-        console.log('Validando email:', email); // Para depurar
-        
-        // Si está vacío
-        if (!email) {
-            messageDiv.textContent = '⏳ Ingrese su correo institucional';
-            messageDiv.style.color = '#666';
-            btn.disabled = true;
-            console.log('Email vacío');
-            return false;
-        }
-        
-        // Verificar formato básico de email
-        if (!email.includes('@')) {
-            messageDiv.textContent = '❌ Formato de correo inválido';
-            messageDiv.style.color = '#dc3545';
-            btn.disabled = true;
-            console.log('Formato inválido');
-            return false;
-        }
-        
-        // Verificar dominio permitido
-        const emailLower = email.toLowerCase();
-        let dominioValido = false;
-        
-        for (let dominio of DOMINIOS_PERMITIDOS) {
-            if (emailLower.endsWith(dominio)) {
-                dominioValido = true;
-                break;
-            }
-        }
-        
-        if (dominioValido) {
-            messageDiv.textContent = '✅ Correo válido';
-            messageDiv.style.color = '#28a745';
-            btn.disabled = false;
-            console.log('Email válido, botón habilitado');
-            return true;
-        } else {
-            const dominioActual = email.split('@')[1] || 'desconocido';
-            messageDiv.textContent = `❌ Dominio "${dominioActual}" no autorizado. Use @mutua.es, @aurgi.com o @mutuamadmotor.com`;
-            messageDiv.style.color = '#dc3545';
-            btn.disabled = true;
-            console.log('Dominio no válido');
-            return false;
-        }
-    }
-
-    // ======================
-    // FUNCIÓN PRINCIPAL: GENERAR CÓDIGO - VERSIÓN CORREGIDA
+    // FUNCIÓN PRINCIPAL: GENERAR CÓDIGO (SIN VALIDACIÓN COMPLEJA)
     // ======================
     async function generateCode() {
         console.log('generateCode iniciado');
@@ -463,7 +396,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const tipoDoc = document.getElementById('docType').value;
         const hashDoc = document.getElementById('docHash').value.trim();
         
-        // Validar campos obligatorios
+        // Validación básica
         if (!email) {
             alert('❌ Por favor, ingrese su correo');
             return;
@@ -474,10 +407,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Validar email
-        if (!validateEmail()) {
-            alert('❌ Correo no autorizado');
-            return;
+        // Validar dominio del email (solo informativo, no bloquea)
+        const emailLower = email.toLowerCase();
+        const dominioValido = DOMINIOS_PERMITIDOS.some(dominio => emailLower.endsWith(dominio));
+        
+        if (!dominioValido) {
+            if (!confirm('⚠️ El dominio del correo no está autorizado. ¿Desea continuar de todos modos?')) {
+                return;
+            }
         }
         
         // Mostrar loading
@@ -491,7 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const codigoUnico = generateUniqueCode();
             console.log('Código generado:', codigoUnico);
             
-            // 1. GUARDAR EN SUPABASE
+            // Guardar en Supabase
             const { data, error } = await supabase
                 .from('codigos_qr')
                 .insert([
@@ -501,10 +438,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         nombre_agente: nombre,
                         tipo_documento: tipoDoc,
                         hash_documento: hashDoc || null,
-                        metadata: {
-                            user_agent: navigator.userAgent,
-                            timestamp: new Date().toISOString()
-                        }
+                        fecha_creacion: new Date().toISOString()
                     }
                 ])
                 .select();
@@ -516,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             console.log('✅ Guardado en Supabase:', data);
             
-            // 2. MOSTRAR RESULTADOS
+            // Mostrar resultados
             const urlVerificacion = `${window.location.origin}${window.location.pathname}?verify=${codigoUnico}`;
             mostrarResultado(codigoUnico, urlVerificacion);
             
@@ -528,8 +462,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
-            // Re-validar email después de habilitar
-            validateEmail();
         }
     }
 
@@ -597,6 +529,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         document.getElementById('results').classList.add('show');
+        
+        // Scroll a resultados
+        setTimeout(() => {
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }, 100);
     }
 
     function showResult(type, html) {
@@ -636,17 +573,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ======================
-    // INICIALIZACIÓN
+    // INICIALIZACIÓN SIMPLE
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Página cargada');
+        console.log('Página cargada - Sistema listo');
         
-        // Configurar validación de email
+        // Asegurar que el botón esté habilitado
+        const btn = document.getElementById('generateBtn');
+        btn.disabled = false;
+        
+        // Mensaje informativo para el email
         const emailInput = document.getElementById('agentEmail');
-        if (emailInput) {
-            emailInput.addEventListener('input', validateEmail);
-            emailInput.addEventListener('blur', validateEmail);
-        }
+        const messageDiv = document.getElementById('emailMessage');
+        
+        emailInput.addEventListener('input', function() {
+            const email = this.value.trim();
+            if (email) {
+                const emailLower = email.toLowerCase();
+                const valido = DOMINIOS_PERMITIDOS.some(dominio => emailLower.endsWith(dominio));
+                
+                if (valido) {
+                    messageDiv.textContent = '✅ Correo válido';
+                    messageDiv.style.color = '#28a745';
+                } else {
+                    messageDiv.textContent = '⚠️ Dominio no autorizado (puede continuar)';
+                    messageDiv.style.color = '#ff6600';
+                }
+            } else {
+                messageDiv.textContent = '';
+            }
+        });
         
         // Verificar código en URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -655,9 +611,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('verifyCode').value = verifyCode;
             setTimeout(verifyCode, 500);
         }
-        
-        // Forzar validación inicial
-        setTimeout(validateEmail, 100);
     });
 </script>
 </body>
