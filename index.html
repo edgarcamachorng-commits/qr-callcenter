@@ -386,7 +386,7 @@
     const DOMINIOS_PERMITIDOS = ['@mutua.es', '@aurgi.com', '@mutuamadmotor.com'];
 
     // ======================
-    // FUNCIÓN PRINCIPAL: GENERAR CÓDIGO (SIN VALIDACIÓN COMPLEJA)
+    // GENERAR CÓDIGO - VERSIÓN SIMPLIFICADA QUE FUNCIONA
     // ======================
     async function generateCode() {
         console.log('generateCode iniciado');
@@ -397,24 +397,9 @@
         const hashDoc = document.getElementById('docHash').value.trim();
         
         // Validación básica
-        if (!email) {
-            alert('❌ Por favor, ingrese su correo');
+        if (!email || !nombre) {
+            alert('❌ Por favor, complete todos los campos obligatorios');
             return;
-        }
-        
-        if (!nombre) {
-            alert('❌ Por favor, ingrese su nombre');
-            return;
-        }
-        
-        // Validar dominio del email (solo informativo, no bloquea)
-        const emailLower = email.toLowerCase();
-        const dominioValido = DOMINIOS_PERMITIDOS.some(dominio => emailLower.endsWith(dominio));
-        
-        if (!dominioValido) {
-            if (!confirm('⚠️ El dominio del correo no está autorizado. ¿Desea continuar de todos modos?')) {
-                return;
-            }
         }
         
         // Mostrar loading
@@ -428,7 +413,7 @@
             const codigoUnico = generateUniqueCode();
             console.log('Código generado:', codigoUnico);
             
-            // Guardar en Supabase
+            // GUARDAR EN SUPABASE - Versión corregida
             const { data, error } = await supabase
                 .from('codigos_qr')
                 .insert([
@@ -438,27 +423,27 @@
                         nombre_agente: nombre,
                         tipo_documento: tipoDoc,
                         hash_documento: hashDoc || null,
-                        fecha_creacion: new Date().toISOString()
+                        fecha_creacion: new Date().toISOString(),
+                        verificado: false
                     }
-                ])
-                .select();
+                ]);
             
             if (error) {
                 console.error('Error de Supabase:', error);
                 throw error;
             }
             
-            console.log('✅ Guardado en Supabase:', data);
+            console.log('✅ Guardado en Supabase');
             
-            // Mostrar resultados
+            // MOSTRAR RESULTADOS
             const urlVerificacion = `${window.location.origin}${window.location.pathname}?verify=${codigoUnico}`;
-            mostrarResultado(codigoUnico, urlVerificacion);
+            mostrarResultado(codigoUnico, urlVerificacion, email, nombre, tipoDoc, hashDoc);
             
             alert('✅ Código guardado en base de datos');
             
         } catch (error) {
             console.error('Error:', error);
-            alert('❌ Error: ' + (error.message || 'Error desconocido'));
+            alert('❌ Error: ' + (error.message || 'Error al guardar'));
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -473,7 +458,8 @@
         const resultDiv = document.getElementById('verificationResult');
         
         if (!codigo || codigo.length !== 8) {
-            showResult('error', '❌ Código inválido. Debe tener 8 caracteres.');
+            resultDiv.className = 'verification-result error';
+            resultDiv.innerHTML = '❌ Código inválido. Debe tener 8 caracteres.';
             return;
         }
         
@@ -489,7 +475,8 @@
             
             if (error) {
                 if (error.code === 'PGRST116') {
-                    showResult('error', '❌ Código no encontrado');
+                    resultDiv.className = 'verification-result error';
+                    resultDiv.innerHTML = '❌ Código no encontrado';
                 } else {
                     throw error;
                 }
@@ -497,25 +484,36 @@
             }
             
             if (data) {
-                showResult('success', `
+                // Actualizar como verificado
+                await supabase
+                    .from('codigos_qr')
+                    .update({ 
+                        verificado: true,
+                        fecha_verificacion: new Date().toISOString()
+                    })
+                    .eq('id', data.id);
+                
+                resultDiv.className = 'verification-result success';
+                resultDiv.innerHTML = `
                     <h3>✅ Código Válido</h3>
                     <p><strong>Agente:</strong> ${data.nombre_agente} (${data.email})</p>
                     <p><strong>Tipo documento:</strong> ${data.tipo_documento}</p>
                     <p><strong>Fecha creación:</strong> ${new Date(data.fecha_creacion).toLocaleString()}</p>
                     <p><strong>Hash documento:</strong> ${data.hash_documento || 'No proporcionado'}</p>
-                `);
+                `;
             }
             
         } catch (error) {
             console.error('Error:', error);
-            showResult('error', '❌ Error de conexión: ' + error.message);
+            resultDiv.className = 'verification-result error';
+            resultDiv.innerHTML = '❌ Error de conexión: ' + error.message;
         }
     }
 
     // ======================
     // FUNCIONES AUXILIARES
     // ======================
-    function mostrarResultado(codigo, url) {
+    function mostrarResultado(codigo, url, email, nombre, tipo, hash) {
         document.getElementById('uniqueCode').textContent = codigo;
         document.getElementById('verificationUrl').textContent = url;
         
@@ -528,18 +526,20 @@
             height: 200
         });
         
-        document.getElementById('results').classList.add('show');
+        // Guardar en localStorage
+        saveToLocalHistory({
+            codigo: codigo,
+            email: email,
+            nombre: nombre,
+            tipo: tipo,
+            hash: hash,
+            fecha: new Date().toLocaleString(),
+            url: url,
+            verificado: false
+        });
         
-        // Scroll a resultados
-        setTimeout(() => {
-            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-    }
-
-    function showResult(type, html) {
-        const resultDiv = document.getElementById('verificationResult');
-        resultDiv.className = `verification-result ${type}`;
-        resultDiv.innerHTML = html;
+        document.getElementById('results').classList.add('show');
+        updateLocalHistory();
     }
 
     function generateUniqueCode() {
@@ -552,14 +552,76 @@
     }
 
     // ======================
+    // VALIDACIÓN DE EMAIL (informativa)
+    // ======================
+    function validateEmail() {
+        const emailInput = document.getElementById('agentEmail');
+        const email = emailInput.value.trim();
+        const messageDiv = document.getElementById('emailMessage');
+        
+        if (!email) {
+            messageDiv.textContent = '';
+            return false;
+        }
+        
+        const emailLower = email.toLowerCase();
+        const esValido = DOMINIOS_PERMITIDOS.some(dominio => emailLower.endsWith(dominio));
+        
+        if (esValido) {
+            messageDiv.textContent = '✅ Correo válido';
+            messageDiv.style.color = '#28a745';
+            return true;
+        } else {
+            messageDiv.textContent = '⚠️ Dominio no autorizado (puede continuar)';
+            messageDiv.style.color = '#ff6600';
+            return false;
+        }
+    }
+
+    // ======================
+    // FUNCIONES DE LOCALSTORAGE
+    // ======================
+    function saveToLocalHistory(data) {
+        let historial = JSON.parse(localStorage.getItem('codigosQR') || '[]');
+        historial.unshift(data);
+        if (historial.length > 100) historial = historial.slice(0, 100);
+        localStorage.setItem('codigosQR', JSON.stringify(historial));
+    }
+
+    function updateLocalHistory() {
+        const historial = JSON.parse(localStorage.getItem('codigosQR') || '[]');
+        const container = document.getElementById('localHistory');
+        
+        if (historial.length === 0) {
+            container.innerHTML = '<p style="color: #666; text-align: center;">No hay códigos generados aún.</p>';
+            return;
+        }
+        
+        let html = '';
+        historial.slice(0, 10).forEach(item => {
+            html += `
+                <div class="history-item">
+                    <div>
+                        <strong>${item.codigo}</strong><br>
+                        <small>${item.email} • ${item.tipo}</small>
+                    </div>
+                    <div style="text-align: right;">
+                        <small>${item.fecha}</small><br>
+                        <small>${item.verificado ? '✅' : '⏳'}</small>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    // ======================
     // FUNCIONES DE UTILIDAD
     // ======================
     function copyToClipboard(elementId) {
-        const element = document.getElementById(elementId);
-        const text = element.textContent;
+        const text = document.getElementById(elementId).textContent;
         navigator.clipboard.writeText(text)
-            .then(() => alert('✅ Copiado al portapapeles'))
-            .catch(() => alert('❌ Error al copiar'));
+            .then(() => alert('✅ Copiado al portapapeles'));
     }
 
     function downloadQR() {
@@ -573,36 +635,15 @@
     }
 
     // ======================
-    // INICIALIZACIÓN SIMPLE
+    // INICIALIZACIÓN
     // ======================
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Página cargada - Sistema listo');
-        
-        // Asegurar que el botón esté habilitado
-        const btn = document.getElementById('generateBtn');
-        btn.disabled = false;
-        
-        // Mensaje informativo para el email
+        // Configurar validación de email
         const emailInput = document.getElementById('agentEmail');
-        const messageDiv = document.getElementById('emailMessage');
+        emailInput.addEventListener('input', validateEmail);
         
-        emailInput.addEventListener('input', function() {
-            const email = this.value.trim();
-            if (email) {
-                const emailLower = email.toLowerCase();
-                const valido = DOMINIOS_PERMITIDOS.some(dominio => emailLower.endsWith(dominio));
-                
-                if (valido) {
-                    messageDiv.textContent = '✅ Correo válido';
-                    messageDiv.style.color = '#28a745';
-                } else {
-                    messageDiv.textContent = '⚠️ Dominio no autorizado (puede continuar)';
-                    messageDiv.style.color = '#ff6600';
-                }
-            } else {
-                messageDiv.textContent = '';
-            }
-        });
+        // Habilitar botón siempre
+        document.getElementById('generateBtn').disabled = false;
         
         // Verificar código en URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -611,6 +652,9 @@
             document.getElementById('verifyCode').value = verifyCode;
             setTimeout(verifyCode, 500);
         }
+        
+        // Cargar historial
+        updateLocalHistory();
     });
 </script>
 </body>
