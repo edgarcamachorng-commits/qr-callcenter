@@ -375,6 +375,17 @@
 
 <script>
     // ======================
+// FORZAR HABILITACIÓN DEL BOTÓN (AGREGA ESTO)
+// ======================
+document.addEventListener('DOMContentLoaded', function() {
+    // Forzar que el botón se habilite después de 1 segundo
+    setTimeout(function() {
+        const btn = document.getElementById('generateBtn');
+        btn.disabled = false;
+        console.log('✅ Botón forzado a habilitado');
+    }, 1000);
+});
+    // ======================
     // CONFIGURACIÓN SUPABASE
     // ======================
     const SUPABASE_URL = 'https://eayibccyjvpmusarzlgf.supabase.co';
